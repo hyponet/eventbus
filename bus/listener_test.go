@@ -28,14 +28,14 @@ var _ = Describe("TestListener", func() {
 			}
 			Context("create", func() {
 				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).ShouldNot(BeNil())
+				Expect(err).Should(BeNil())
 			})
 			Context("exec", func() {
 				l.call()
 				<-finish
 			})
 			Context("check", func() {
-				Expect(isExec).ShouldNot(BeTrue())
+				Expect(isExec).Should(BeTrue())
 			})
 		})
 		It("with normal args", func() {
@@ -46,7 +46,7 @@ var _ = Describe("TestListener", func() {
 			}
 			Context("create", func() {
 				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).ShouldNot(BeNil())
+				Expect(err).Should(BeNil())
 			})
 			Context("exec", func() {
 				l.call(9, "hello")
@@ -68,7 +68,7 @@ var _ = Describe("TestListener", func() {
 				ans.next += a1.next
 				if a2 != nil {
 					ans.hello += a2.hello
-					ans.next += a3.next
+					ans.next += a2.next
 				}
 				if a3 != nil {
 					ans.hello += a3.hello
@@ -81,7 +81,7 @@ var _ = Describe("TestListener", func() {
 
 			Context("create", func() {
 				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).ShouldNot(BeNil())
+				Expect(err).Should(BeNil())
 			})
 			Context("exec", func() {
 				l.call(aStruct{hello: "a", next: 4}, &aStruct{hello: "b", next: 6}, nil)

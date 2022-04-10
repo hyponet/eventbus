@@ -1,4 +1,4 @@
-module github.com/Coderhypo/eventbus
+module github.com/hyponet/eventbus
 
 go 1.18
 

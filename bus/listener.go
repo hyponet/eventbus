@@ -21,7 +21,7 @@ func (l *listener) call(args ...interface{}) {
 		l.mux.Lock()
 		defer l.mux.Unlock()
 	}
-	l.fn.Call(l.parseArgs(args))
+	l.fn.Call(l.parseArgs(args...))
 }
 
 func (l *listener) parseArgs(inArgs ...interface{}) (args []reflect.Value) {
@@ -29,7 +29,7 @@ func (l *listener) parseArgs(inArgs ...interface{}) (args []reflect.Value) {
 	args = make([]reflect.Value, len(inArgs))
 	for i, inArg := range inArgs {
 		if inArg == nil {
-			args[i] = reflect.New(reflect.TypeOf(fn.In(i))).Elem()
+			args[i] = reflect.New(fn.In(i)).Elem()
 			continue
 		}
 		args[i] = reflect.ValueOf(inArg)
