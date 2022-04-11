@@ -58,7 +58,7 @@ func insertToRadixTree(root *radixNode, topic, value string) {
 
 	for crt != nil {
 		prefix := strings.Split(crt.prefix, sectionDelimiter)
-		m := getSameSections(prefix, sections, false)
+		m := getSameSections(prefix, sections)
 		if m == 0 {
 			if crt.next == nil {
 				crt.next = &radixNode{
@@ -105,7 +105,7 @@ func removeFromRadixTree(root *radixNode, topic, value string) {
 
 	for crt != nil {
 		prefix := strings.Split(crt.prefix, sectionDelimiter)
-		m := getSameSections(prefix, sections, false)
+		m := getSameSections(prefix, sections)
 		if m == 0 {
 			if crt.next == nil {
 				return
@@ -169,16 +169,15 @@ func lookupRadixTree(root *radixNode, topic string) (values []string) {
 	)
 	for len(queue) > 0 {
 		var (
-			crt        = queue[0].next
-			idx        = queue[0].idx
-			isWildcard bool
+			crt = queue[0].next
+			idx = queue[0].idx
 		)
 		queue = queue[1:]
 
 		for crt != nil {
 			prefix := strings.Split(crt.prefix, sectionDelimiter)
 			subSections := sections[idx:]
-			m := getSameSections(prefix, sections[idx:], true)
+			m, isWildcard := getSameSectionsWithWildcard(prefix, sections[idx:])
 			if m == 0 {
 				crt = crt.next
 				continue
@@ -187,8 +186,6 @@ func lookupRadixTree(root *radixNode, topic string) (values []string) {
 			if m < len(prefix) {
 				break
 			}
-
-			isWildcard = prefix[m-1] == oneSectionWildcard || subSections[m-1] == oneSectionWildcard
 
 			if m < len(subSections) {
 				queue = append(queue, pos{idx: idx + m, next: crt.children})
@@ -211,10 +208,23 @@ func lookupRadixTree(root *radixNode, topic string) (values []string) {
 	return
 }
 
-func getSameSections(prefix, pattern []string, withWildcard bool) int {
+func getSameSections(prefix, pattern []string) int {
 	m := 0
 	for m < len(prefix) && m < len(pattern) {
-		if withWildcard && (prefix[m] == oneSectionWildcard || pattern[m] == oneSectionWildcard) {
+		if prefix[m] != pattern[m] {
+			break
+		}
+		m += 1
+	}
+	return m
+}
+
+func getSameSectionsWithWildcard(prefix, pattern []string) (int, bool) {
+	m := 0
+	hasWildcard := false
+	for m < len(prefix) && m < len(pattern) {
+		if prefix[m] == oneSectionWildcard || pattern[m] == oneSectionWildcard {
+			hasWildcard = true
 			m += 1
 			continue
 		}
@@ -223,7 +233,7 @@ func getSameSections(prefix, pattern []string, withWildcard bool) int {
 		}
 		m += 1
 	}
-	return m
+	return m, hasWildcard
 }
 
 func removeValues(values []string, value string) []string {
