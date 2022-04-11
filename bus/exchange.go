@@ -18,7 +18,11 @@ func (e *exchange) add(topic, lID string) {
 }
 
 func (e *exchange) remove(lID string) {
-	removeFromRadixTree(e.root, e.topicMapping[lID], lID)
+	topic, ok := e.topicMapping[lID]
+	if !ok {
+		return
+	}
+	removeFromRadixTree(e.root, topic, lID)
 	delete(e.topicMapping, lID)
 }
 
@@ -95,29 +99,61 @@ func removeFromRadixTree(root *radixNode, topic, value string) {
 		sections = strings.Split(topic, sectionDelimiter)
 	)
 
-	for i := 0; i < len(sections); {
-		prefix := strings.Split(crt.prefix, sectionDelimiter)
-		subSections := sections[i:]
-		m := getSameSections(prefix, subSections)
+	if crt == nil {
+		return
+	}
 
+	for crt != nil {
+		prefix := strings.Split(crt.prefix, sectionDelimiter)
+		m := getSameSections(prefix, sections)
 		if m == 0 {
-			if crt.next != nil {
-				continue
+			if crt.next == nil {
+				return
 			}
-			return
+			crt = crt.next
+			continue
 		}
 
 		if m < len(prefix) {
 			return
 		}
 
-		if m == len(subSections) {
-			crt.values = removeValues(crt.values, value)
+		if m < len(sections) {
+			removeFromRadixTree(crt, strings.Join(sections[m:], sectionDelimiter), value)
+			if crt.children != nil && crt.children.next == nil && len(crt.values) == 0 {
+				// merge
+				crt.prefix += "." + crt.children.prefix
+				crt.values = crt.children.values
+				crt.children = crt.children.children
+			}
 			return
 		}
 
-		crt = crt.children
-		i += m
+		// do delete
+		crt.values = removeValues(crt.values, value)
+
+		child := root.children
+		lastChild := child
+		for child != nil {
+			if len(child.values) == 0 && child.children == nil {
+				if child == lastChild {
+					root.children = child.next
+					break
+				}
+				lastChild.next = child.next
+				break
+			}
+			lastChild = child
+			child = child.next
+		}
+
+		if crt.children != nil && crt.children.next == nil && len(crt.values) == 0 {
+			// merge
+			crt.prefix += "." + crt.children.prefix
+			crt.values = crt.children.values
+			crt.children = crt.children.children
+		}
+		return
 	}
 }
 
@@ -141,7 +177,7 @@ func removeValues(values []string, value string) []string {
 		if val != value {
 			continue
 		}
-		return append(values[:i-1], values[i:]...)
+		return append(values[:i], values[i+1:]...)
 	}
 	return values
 }
