@@ -38,6 +38,10 @@ func (l *listener) parseArgs(inArgs ...interface{}) (args []reflect.Value) {
 }
 
 func buildNewListener(topic string, fn interface{}, block, once bool) (*listener, error) {
+	if fn == nil {
+		return nil, fmt.Errorf("handler must be function")
+	}
+
 	handler := reflect.ValueOf(fn)
 	if handler.Type().Kind() != reflect.Func {
 		return nil, fmt.Errorf("handler not a function")

@@ -28,17 +28,24 @@ func (b *eventbus) register(l *listener) {
 
 func (b *eventbus) unregister(lID string) {
 	b.mux.Lock()
+	b.unregisterWithLock(lID)
+	b.mux.Unlock()
+}
+
+func (b *eventbus) unregisterWithLock(lID string) {
 	delete(b.listeners, lID)
 	b.exchange.remove(lID)
-	b.mux.Unlock()
 }
 
 func (b *eventbus) publish(topic string, args ...interface{}) {
 	var needDo []*listener
 	b.mux.Lock()
 	lIDs := b.exchange.route(topic)
-	for _, lID := range lIDs {
+	for i, lID := range lIDs {
 		needDo = append(needDo, b.listeners[lID])
+		if needDo[i].once {
+			b.unregisterWithLock(lID)
+		}
 	}
 	b.mux.Unlock()
 
@@ -46,9 +53,6 @@ func (b *eventbus) publish(topic string, args ...interface{}) {
 		l := needDo[i]
 		go func() {
 			l.call(args...)
-			if l.once {
-				b.unregister(l.id)
-			}
 		}()
 	}
 }

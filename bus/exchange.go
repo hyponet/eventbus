@@ -58,7 +58,7 @@ func insertToRadixTree(root *radixNode, topic, value string) {
 
 	for crt != nil {
 		prefix := strings.Split(crt.prefix, sectionDelimiter)
-		m := getSameSections(prefix, sections)
+		m := getSameSections(prefix, sections, false)
 		if m == 0 {
 			if crt.next == nil {
 				crt.next = &radixNode{
@@ -105,7 +105,7 @@ func removeFromRadixTree(root *radixNode, topic, value string) {
 
 	for crt != nil {
 		prefix := strings.Split(crt.prefix, sectionDelimiter)
-		m := getSameSections(prefix, sections)
+		m := getSameSections(prefix, sections, false)
 		if m == 0 {
 			if crt.next == nil {
 				return
@@ -157,13 +157,67 @@ func removeFromRadixTree(root *radixNode, topic, value string) {
 	}
 }
 
-func lookupRadixTree(root *radixNode, topic string) (values []string) {
-	return nil
+type pos struct {
+	idx  int
+	next *radixNode
 }
 
-func getSameSections(prefix, pattern []string) int {
+func lookupRadixTree(root *radixNode, topic string) (values []string) {
+	var (
+		queue    = []pos{{idx: 0, next: root.children}}
+		sections = strings.Split(topic, sectionDelimiter)
+	)
+	for len(queue) > 0 {
+		var (
+			crt        = queue[0].next
+			idx        = queue[0].idx
+			isWildcard bool
+		)
+		queue = queue[1:]
+
+		for crt != nil {
+			prefix := strings.Split(crt.prefix, sectionDelimiter)
+			subSections := sections[idx:]
+			m := getSameSections(prefix, sections[idx:], true)
+			if m == 0 {
+				crt = crt.next
+				continue
+			}
+
+			if m < len(prefix) {
+				break
+			}
+
+			isWildcard = prefix[m-1] == oneSectionWildcard || subSections[m-1] == oneSectionWildcard
+
+			if m < len(subSections) {
+				queue = append(queue, pos{idx: idx + m, next: crt.children})
+				if isWildcard {
+					crt = crt.next
+					continue
+				}
+				break
+			}
+
+			values = append(values, crt.values...)
+			if isWildcard {
+				crt = crt.next
+				continue
+			}
+			break
+		}
+	}
+
+	return
+}
+
+func getSameSections(prefix, pattern []string, withWildcard bool) int {
 	m := 0
 	for m < len(prefix) && m < len(pattern) {
+		if withWildcard && (prefix[m] == oneSectionWildcard || pattern[m] == oneSectionWildcard) {
+			m += 1
+			continue
+		}
 		if prefix[m] != pattern[m] {
 			break
 		}
