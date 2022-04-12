@@ -30,7 +30,7 @@ func doNothing() {}
 
 func init() {
 	for _, topic := range topics {
-		_, _ = bus.Register(topic, doNothing)
+		_, _ = bus.Subscribe(topic, doNothing)
 	}
 }
 
@@ -41,9 +41,9 @@ func BenchmarkBusPublish(b *testing.B) {
 	}
 }
 
-func BenchmarkBusRegister(b *testing.B) {
+func BenchmarkBusSubscribe(b *testing.B) {
 	target := append(topics, wildcards...)
 	for n := 0; n < b.N; n++ {
-		_, _ = bus.Register(target[n%len(target)], doNothing)
+		_, _ = bus.Subscribe(target[n%len(target)], doNothing)
 	}
 }

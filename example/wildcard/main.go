@@ -21,8 +21,8 @@ func aliceDoSomething() {
 }
 
 func main() {
-	_, _ = bus.Register("partner.bob.do", bobDoSomething)
-	_, _ = bus.Register("partner.alice.do", aliceDoSomething)
+	_, _ = bus.Subscribe("partner.bob.do", bobDoSomething)
+	_, _ = bus.Subscribe("partner.alice.do", aliceDoSomething)
 	bus.Publish("partner.*.do")
 	<-waitBob
 	<-waitAlice

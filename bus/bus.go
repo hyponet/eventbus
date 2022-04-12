@@ -19,20 +19,20 @@ type eventbus struct {
 	mux       sync.RWMutex
 }
 
-func (b *eventbus) register(l *listener) {
+func (b *eventbus) subscribe(l *listener) {
 	b.mux.Lock()
 	b.listeners[l.id] = l
 	b.exchange.add(l.topic, l.id)
 	b.mux.Unlock()
 }
 
-func (b *eventbus) unregister(lID string) {
+func (b *eventbus) unsubscribe(lID string) {
 	b.mux.Lock()
-	b.unregisterWithLock(lID)
+	b.unsubscribeWithLock(lID)
 	b.mux.Unlock()
 }
 
-func (b *eventbus) unregisterWithLock(lID string) {
+func (b *eventbus) unsubscribeWithLock(lID string) {
 	delete(b.listeners, lID)
 	b.exchange.remove(lID)
 }
@@ -44,7 +44,7 @@ func (b *eventbus) publish(topic string, args ...interface{}) {
 	for i, lID := range lIDs {
 		needDo = append(needDo, b.listeners[lID])
 		if needDo[i].once {
-			b.unregisterWithLock(lID)
+			b.unsubscribeWithLock(lID)
 		}
 	}
 	b.mux.Unlock()
@@ -57,38 +57,38 @@ func (b *eventbus) publish(topic string, args ...interface{}) {
 	}
 }
 
-func Register(topic string, fn interface{}) (string, error) {
+func Subscribe(topic string, fn interface{}) (string, error) {
 	l, err := buildNewListener(topic, fn, false, false)
 	if err != nil {
 		return "", err
 	}
 
-	evb.register(l)
+	evb.subscribe(l)
 	return l.id, nil
 }
 
-func RegisterOnce(topic string, fn interface{}) (string, error) {
+func SubscribeOnce(topic string, fn interface{}) (string, error) {
 	l, err := buildNewListener(topic, fn, false, true)
 	if err != nil {
 		return "", err
 	}
 
-	evb.register(l)
+	evb.subscribe(l)
 	return l.id, nil
 }
 
-func RegisterWithBlock(topic string, fn interface{}) (string, error) {
+func SubscribeWithBlock(topic string, fn interface{}) (string, error) {
 	l, err := buildNewListener(topic, fn, true, false)
 	if err != nil {
 		return "", err
 	}
 
-	evb.register(l)
+	evb.subscribe(l)
 	return l.id, nil
 }
 
-func Unregister(lID string) {
-	evb.unregister(lID)
+func Unsubscribe(lID string) {
+	evb.unsubscribe(lID)
 }
 
 func Publish(topic string, args ...interface{}) {

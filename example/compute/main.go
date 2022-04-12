@@ -13,7 +13,7 @@ func aAndBComputer(a, b int) {
 }
 
 func main() {
-	_, _ = bus.Register("op.int.and", aAndBComputer)
+	_, _ = bus.Subscribe("op.int.and", aAndBComputer)
 	bus.Publish("op.int.and", 1, 2)
 	<-waiting
 }

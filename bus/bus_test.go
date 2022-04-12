@@ -16,22 +16,22 @@ var _ = Describe("TestEventBusApi", func() {
 		}
 	})
 	Describe("", func() {
-		It("test register handler", func() {
+		It("test subscribe handler", func() {
 			Context("succeed", func() {
-				_, err = Register("test.topic.a", func() {})
+				_, err = Subscribe("test.topic.a", func() {})
 				Expect(err).Should(BeNil())
 
-				_, err = Register("test.topic.a", func(astr, bstr string) error { return nil })
+				_, err = Subscribe("test.topic.a", func(astr, bstr string) error { return nil })
 				Expect(err).Should(BeNil())
 			})
 			Context("not func", func() {
-				_, err = Register("test.topic.c", "wrong val")
+				_, err = Subscribe("test.topic.c", "wrong val")
 				Expect(err).ShouldNot(BeNil())
 
-				_, err = Register("test.topic.c", nil)
+				_, err = Subscribe("test.topic.c", nil)
 				Expect(err).ShouldNot(BeNil())
 
-				_, err = Register("test.topic.c", 0)
+				_, err = Subscribe("test.topic.c", 0)
 				Expect(err).ShouldNot(BeNil())
 			})
 		})
@@ -40,7 +40,7 @@ var _ = Describe("TestEventBusApi", func() {
 				isExec = false
 				topic  = "test.topic.a"
 			)
-			_, err = Register("test.topic.a", func() {
+			_, err = Subscribe("test.topic.a", func() {
 				isExec = true
 			})
 			Expect(err).Should(BeNil())
@@ -51,17 +51,17 @@ var _ = Describe("TestEventBusApi", func() {
 				return isExec == true
 			}, time.Minute, time.Second).Should(BeTrue())
 		})
-		It("test unregister handler", func() {
+		It("test unsubscribe handler", func() {
 			var (
 				lID    string
 				isExec = false
 				topic  = "test.topic.a"
 			)
-			lID, err = Register("test.topic.a", func() {
+			lID, err = Subscribe("test.topic.a", func() {
 				isExec = true
 			})
 			Expect(err).Should(BeNil())
-			Unregister(lID)
+			Unsubscribe(lID)
 			Publish(topic)
 			time.Sleep(time.Second * 5)
 			Expect(isExec).Should(BeFalse())
@@ -101,7 +101,7 @@ var _ = Describe("TestEventBus", func() {
 				var err error
 				l, err = buildNewListener(topic, runFn, false, false)
 				Expect(err).Should(BeNil())
-				testBus.register(l)
+				testBus.subscribe(l)
 
 				needRun := 1000
 				for i := 0; i < needRun; i++ {
@@ -117,7 +117,7 @@ var _ = Describe("TestEventBus", func() {
 				var err error
 				l, err = buildNewListener(topic, runFn, true, false)
 				Expect(err).Should(BeNil())
-				testBus.register(l)
+				testBus.subscribe(l)
 
 				needRun := 1000
 				for i := 0; i < needRun; i++ {
@@ -134,7 +134,7 @@ var _ = Describe("TestEventBus", func() {
 				var err error
 				l, err = buildNewListener(topic, runFn, false, true)
 				Expect(err).Should(BeNil())
-				testBus.register(l)
+				testBus.subscribe(l)
 
 				needRun := 10
 				for i := 0; i < needRun; i++ {
