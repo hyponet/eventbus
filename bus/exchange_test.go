@@ -94,6 +94,29 @@ var _ = Describe("TestExchangeRoute", func() {
 				Expect(isContained(ex.route("a.b.*.*.f"), "id-6")).Should(BeTrue())
 			})
 		})
+
+		It("test route wildcard", func() {
+			Context("add topics", func() {
+				ex.add("a.b.c.d", "id-1")
+				ex.add("a.b.c.e", "id-2")
+				ex.add("a.b.c.*", "id-3")
+				ex.add("a.b.d.e.f", "id-4")
+				ex.add("a.b.d.*.f", "id-5")
+				ex.add("a.b.d.*.*", "id-6")
+			})
+			Context("add topics", func() {
+				Expect(isContained(ex.route("a.b.c.*"), "id-1")).Should(BeTrue())
+				Expect(isContained(ex.route("a.b.c.*"), "id-2")).Should(BeTrue())
+				Expect(isContained(ex.route("a.b.c.*"), "id-3")).Should(BeTrue())
+
+				Expect(isContained(ex.route("a.b.c.d"), "id-1")).Should(BeTrue())
+				Expect(isContained(ex.route("a.b.c.d"), "id-3")).Should(BeTrue())
+
+				Expect(isContained(ex.route("a.b.d.e.f"), "id-4")).Should(BeTrue())
+				Expect(isContained(ex.route("a.b.d.e.f"), "id-5")).Should(BeTrue())
+				Expect(isContained(ex.route("a.b.d.e.f"), "id-6")).Should(BeTrue())
+			})
+		})
 	})
 })
 
