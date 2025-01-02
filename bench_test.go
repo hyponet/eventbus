@@ -1,4 +1,4 @@
-package eventbus__test
+package eventbus
 
 import (
 	"github.com/hyponet/eventbus/bus"
@@ -30,7 +30,7 @@ func doNothing() {}
 
 func init() {
 	for _, topic := range topics {
-		_, _ = bus.Subscribe(topic, doNothing)
+		bus.Subscribe(topic, doNothing)
 	}
 }
 
@@ -44,6 +44,6 @@ func BenchmarkBusPublish(b *testing.B) {
 func BenchmarkBusSubscribe(b *testing.B) {
 	target := append(topics, wildcards...)
 	for n := 0; n < b.N; n++ {
-		_, _ = bus.Subscribe(target[n%len(target)], doNothing)
+		bus.Subscribe(target[n%len(target)], doNothing)
 	}
 }

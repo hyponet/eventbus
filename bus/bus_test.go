@@ -8,31 +8,17 @@ import (
 )
 
 var _ = Describe("TestEventBusApi", func() {
-	var err error
 	BeforeEach(func() {
-		evb = &eventbus{
-			listeners: map[string]*listener{},
+		sb = &Bus{
+			listeners: map[string]*Listener{},
 			exchange:  newExchange(),
 		}
 	})
 	Describe("", func() {
 		It("test subscribe handler", func() {
 			Context("succeed", func() {
-				_, err = Subscribe("test.topic.a", func() {})
-				Expect(err).Should(BeNil())
-
-				_, err = Subscribe("test.topic.a", func(astr, bstr string) error { return nil })
-				Expect(err).Should(BeNil())
-			})
-			Context("not func", func() {
-				_, err = Subscribe("test.topic.c", "wrong val")
-				Expect(err).ShouldNot(BeNil())
-
-				_, err = Subscribe("test.topic.c", nil)
-				Expect(err).ShouldNot(BeNil())
-
-				_, err = Subscribe("test.topic.c", 0)
-				Expect(err).ShouldNot(BeNil())
+				Subscribe("test.topic.a", func() {})
+				Subscribe("test.topic.a", func(astr, bstr string) error { return nil })
 			})
 		})
 		It("test publish", func() {
@@ -40,13 +26,8 @@ var _ = Describe("TestEventBusApi", func() {
 				isExec = false
 				topic  = "test.topic.a"
 			)
-			_, err = Subscribe("test.topic.a", func() {
-				isExec = true
-			})
-			Expect(err).Should(BeNil())
-
+			Subscribe("test.topic.a", func() { isExec = true })
 			Publish(topic)
-
 			Eventually(func() bool {
 				return isExec == true
 			}, time.Minute, time.Second).Should(BeTrue())
@@ -57,10 +38,7 @@ var _ = Describe("TestEventBusApi", func() {
 				isExec = false
 				topic  = "test.topic.a"
 			)
-			lID, err = Subscribe("test.topic.a", func() {
-				isExec = true
-			})
-			Expect(err).Should(BeNil())
+			lID = Subscribe("test.topic.a", func() { isExec = true })
 			Unsubscribe(lID)
 			Publish(topic)
 			time.Sleep(time.Second * 5)
@@ -71,8 +49,8 @@ var _ = Describe("TestEventBusApi", func() {
 
 var _ = Describe("TestEventBus", func() {
 	var (
-		testBus        *eventbus
-		l              *listener
+		testBus        *Bus
+		l              *Listener
 		topic          = "a.b.c.d"
 		runTimes       int
 		unsafeRunTimes int
@@ -86,8 +64,8 @@ var _ = Describe("TestEventBus", func() {
 		mux.Unlock()
 	}
 	BeforeEach(func() {
-		testBus = &eventbus{
-			listeners: map[string]*listener{},
+		testBus = &Bus{
+			listeners: map[string]*Listener{},
 			exchange:  newExchange(),
 		}
 
@@ -98,14 +76,12 @@ var _ = Describe("TestEventBus", func() {
 	Describe("", func() {
 		It("test normal func", func() {
 			Context("run many", func() {
-				var err error
-				l, err = buildNewListener(topic, runFn, false, false)
-				Expect(err).Should(BeNil())
-				testBus.subscribe(l)
+				l = NewListener(topic, runFn, false, false)
+				testBus.Subscribe(l)
 
 				needRun := 1000
 				for i := 0; i < needRun; i++ {
-					testBus.publish(topic)
+					testBus.Publish(topic)
 				}
 				Eventually(func() bool {
 					return runTimes == needRun
@@ -114,14 +90,12 @@ var _ = Describe("TestEventBus", func() {
 		})
 		It("test block func", func() {
 			Context("run many", func() {
-				var err error
-				l, err = buildNewListener(topic, runFn, true, false)
-				Expect(err).Should(BeNil())
-				testBus.subscribe(l)
+				l = NewListener(topic, runFn, true, false)
+				testBus.Subscribe(l)
 
 				needRun := 1000
 				for i := 0; i < needRun; i++ {
-					testBus.publish(topic)
+					testBus.Publish(topic)
 				}
 				Eventually(func() bool {
 					return runTimes == needRun
@@ -131,14 +105,12 @@ var _ = Describe("TestEventBus", func() {
 		})
 		It("test once func", func() {
 			Context("run once", func() {
-				var err error
-				l, err = buildNewListener(topic, runFn, false, true)
-				Expect(err).Should(BeNil())
-				testBus.subscribe(l)
+				l = NewListener(topic, runFn, false, true)
+				testBus.Subscribe(l)
 
 				needRun := 10
 				for i := 0; i < needRun; i++ {
-					testBus.publish(topic)
+					testBus.Publish(topic)
 				}
 				time.Sleep(time.Second * 5)
 				Expect(runTimes).Should(Equal(1))

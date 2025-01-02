@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/hyponet/eventbus/bus"
+	"github.com/hyponet/eventbus"
 )
 
 var (
@@ -21,9 +21,9 @@ func aliceDoSomething() {
 }
 
 func main() {
-	_, _ = bus.Subscribe("partner.bob.do", bobDoSomething)
-	_, _ = bus.Subscribe("partner.alice.do", aliceDoSomething)
-	bus.Publish("partner.*.do")
+	eventbus.Subscribe("partner.bob.do", bobDoSomething)
+	eventbus.Subscribe("partner.alice.do", aliceDoSomething)
+	eventbus.Publish("partner.*.do")
 	<-waitBob
 	<-waitAlice
 }

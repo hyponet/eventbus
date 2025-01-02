@@ -11,7 +11,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/hyponet/eventbus/bus"
+	"github.com/hyponet/eventbus"
 )
 
 func aAndBComputer(a, b int) {
@@ -19,8 +19,8 @@ func aAndBComputer(a, b int) {
 }
 
 func main() {
-	_, _ = bus.Subscribe("op.int.and", aAndBComputer)
-	bus.Publish("op.int.and", 1, 2)
+	eventbus.Subscribe("op.int.and", aAndBComputer)
+	eventbus.Publish("op.int.and", 1, 2)
 }
 ```
 
@@ -31,7 +31,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/hyponet/eventbus/bus"
+	"github.com/hyponet/eventbus"
 )
 
 func bobDoSomething() {
@@ -43,9 +43,9 @@ func aliceDoSomething() {
 }
 
 func main() {
-	_, _ = bus.Subscribe("partner.bob.do", bobDoSomething)
-	_, _ = bus.Subscribe("partner.alice.do", aliceDoSomething)
-	bus.Publish("partner.*.do")
+	eventbus.Subscribe("partner.bob.do", bobDoSomething)
+	eventbus.Subscribe("partner.alice.do", aliceDoSomething)
+	eventbus.Publish("partner.*.do")
 }
 ```
 

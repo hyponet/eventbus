@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/hyponet/eventbus/bus"
+	"github.com/hyponet/eventbus"
 )
 
 var waiting = make(chan struct{})
@@ -13,7 +13,7 @@ func aAndBComputer(a, b int) {
 }
 
 func main() {
-	_, _ = bus.Subscribe("op.int.and", aAndBComputer)
-	bus.Publish("op.int.and", 1, 2)
+	eventbus.Subscribe("op.int.and", aAndBComputer)
+	eventbus.Publish("op.int.and", 1, 2)
 	<-waiting
 }

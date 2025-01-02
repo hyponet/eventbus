@@ -1,9 +1,8 @@
 module github.com/hyponet/eventbus
 
-go 1.20
+go 1.23
 
 require (
-	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
 )

@@ -8,8 +8,7 @@ import (
 
 var _ = Describe("TestListener", func() {
 	var (
-		l      *listener
-		err    error
+		l      *Listener
 		topic  string
 		finish chan struct{}
 	)
@@ -27,8 +26,7 @@ var _ = Describe("TestListener", func() {
 				close(finish)
 			}
 			Context("create", func() {
-				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).Should(BeNil())
+				l = NewListener(topic, handler, false, false)
 			})
 			Context("exec", func() {
 				l.call()
@@ -45,8 +43,7 @@ var _ = Describe("TestListener", func() {
 				close(finish)
 			}
 			Context("create", func() {
-				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).Should(BeNil())
+				l = NewListener(topic, handler, false, false)
 			})
 			Context("exec", func() {
 				l.call(9, "hello")
@@ -80,8 +77,7 @@ var _ = Describe("TestListener", func() {
 			}
 
 			Context("create", func() {
-				l, err = buildNewListener(topic, handler, false, false)
-				Expect(err).Should(BeNil())
+				l = NewListener(topic, handler, false, false)
 			})
 			Context("exec", func() {
 				l.call(aStruct{hello: "a", next: 4}, &aStruct{hello: "b", next: 6}, nil)
