@@ -4,15 +4,13 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var _ = Describe("TestEventBusApi", func() {
 	BeforeEach(func() {
-		sb = &Bus{
-			listeners: map[string]*Listener{},
-			exchange:  newExchange(),
-		}
+		sb = NewBus()
 	})
 	Describe("", func() {
 		It("test subscribe handler", func() {
@@ -23,54 +21,59 @@ var _ = Describe("TestEventBusApi", func() {
 		})
 		It("test publish", func() {
 			var (
-				isExec = false
+				isExec atomic.Bool
 				topic  = "test.topic.a"
 			)
-			Subscribe("test.topic.a", func() { isExec = true })
+			Subscribe("test.topic.a", func() { isExec.Store(true) })
 			Publish(topic)
 			Eventually(func() bool {
-				return isExec == true
+				return isExec.Load() == true
 			}, time.Minute, time.Second).Should(BeTrue())
 		})
 		It("test unsubscribe handler", func() {
 			var (
 				lID    string
-				isExec = false
+				isExec atomic.Bool
 				topic  = "test.topic.a"
 			)
-			lID = Subscribe("test.topic.a", func() { isExec = true })
+			lID = Subscribe("test.topic.a", func() { isExec.Store(true) })
 			Unsubscribe(lID)
 			Publish(topic)
 			time.Sleep(time.Second * 5)
-			Expect(isExec).Should(BeFalse())
+			Expect(isExec.Load()).Should(BeFalse())
 		})
 	})
 })
 
 var _ = Describe("TestEventBus", func() {
 	var (
-		testBus        *Bus
-		l              *Listener
-		topic          = "a.b.c.d"
-		runTimes       int
-		unsafeRunTimes int
+		testBus  *Bus
+		l        *Listener
+		topic    = "a.b.c.d"
+		runTimes int
+		// atomic so the unsynchronized invocation counter itself does
+		// not trip the race detector; ordering guarantees are asserted
+		// via runTimes (mutex-guarded) and the serial tests.
+		unsafeRunTimes atomic.Int64
 		mux            sync.Mutex
 	)
 
+	countRunTimes := func() int {
+		mux.Lock()
+		defer mux.Unlock()
+		return runTimes
+	}
 	runFn := func() {
-		unsafeRunTimes += 1
+		unsafeRunTimes.Add(1)
 		mux.Lock()
 		runTimes += 1
 		mux.Unlock()
 	}
 	BeforeEach(func() {
-		testBus = &Bus{
-			listeners: map[string]*Listener{},
-			exchange:  newExchange(),
-		}
+		testBus = NewBus()
 
 		runTimes = 0
-		unsafeRunTimes = 0
+		unsafeRunTimes.Store(0)
 	})
 
 	Describe("", func() {
@@ -84,7 +87,7 @@ var _ = Describe("TestEventBus", func() {
 					testBus.Publish(topic)
 				}
 				Eventually(func() bool {
-					return runTimes == needRun
+					return countRunTimes() == needRun
 				}, time.Minute, time.Second).Should(BeTrue())
 			})
 		})
@@ -98,9 +101,9 @@ var _ = Describe("TestEventBus", func() {
 					testBus.Publish(topic)
 				}
 				Eventually(func() bool {
-					return runTimes == needRun
+					return countRunTimes() == needRun
 				}, time.Minute, time.Second).Should(BeTrue())
-				Expect(unsafeRunTimes).Should(Equal(needRun))
+				Expect(unsafeRunTimes.Load()).Should(Equal(int64(needRun)))
 			})
 		})
 		It("test once func", func() {
@@ -113,7 +116,7 @@ var _ = Describe("TestEventBus", func() {
 					testBus.Publish(topic)
 				}
 				time.Sleep(time.Second * 5)
-				Expect(runTimes).Should(Equal(1))
+				Expect(countRunTimes()).Should(Equal(1))
 			})
 		})
 	})

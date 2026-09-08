@@ -49,6 +49,35 @@ func main() {
 }
 ```
 
+### Serial delivery
+
+Use an isolated bus when a listener must process events in publication order.
+Serial listeners use a bounded queue and drop the oldest queued event when the
+queue is full. Add `WithBlock` when delivery must be lossless and publishers
+may apply backpressure.
+
+```go
+package main
+
+import "github.com/hyponet/eventbus"
+
+func main() {
+	b := eventbus.NewBus()
+	lid := b.SubscribeSerial("audit.created", func(id int) {
+		// Calls for this listener never overlap and preserve FIFO order.
+	}, eventbus.WithBuffer(1024), eventbus.WithBlock())
+
+	b.Publish("audit.created", 1)
+	b.Publish("audit.created", 2)
+	b.Unsubscribe(lid)
+	b.Wait() // wait for queued events to finish
+}
+```
+
+`Unsubscribe` and `Close` are safe to call from inside a serial handler. They
+start an asynchronous drain; call `Wait` outside the handler when completion
+must be observed.
+
 ## Benchmark
 
 ### Publish
