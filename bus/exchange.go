@@ -8,31 +8,59 @@ const (
 )
 
 type exchange struct {
-	root         *radixNode
-	topicMapping map[string]string
+	root *radixNode
+	// topicMapping tracks every pattern a listener registered under, so
+	// Unsubscribe can remove a multi-topic listener completely.
+	topicMapping map[string][]string
+	// routeSeen is reused across calls to avoid allocating a deduplication map
+	// on every Publish. Bus serializes exchange access with its mutex.
+	routeSeen  map[string]uint64
+	routeEpoch uint64
 }
 
 func (e *exchange) add(topic, lID string) {
-	e.topicMapping[lID] = topic
+	e.topicMapping[lID] = append(e.topicMapping[lID], topic)
 	insertToRadixTree(e.root, topic, lID)
 }
 
 func (e *exchange) remove(lID string) {
-	topic, ok := e.topicMapping[lID]
+	topics, ok := e.topicMapping[lID]
 	if !ok {
 		return
 	}
-	removeFromRadixTree(e.root, topic, lID)
+	for _, topic := range topics {
+		removeFromRadixTree(e.root, topic, lID)
+	}
 	delete(e.topicMapping, lID)
+	delete(e.routeSeen, lID)
 }
 
 func (e *exchange) route(topic string) (listeners []string) {
-	listeners = lookupRadixTree(e.root, topic)
+	ids := lookupRadixTree(e.root, topic)
+	e.routeEpoch++
+	if e.routeEpoch == 0 {
+		clear(e.routeSeen)
+		e.routeEpoch = 1
+	}
+	// One listener may register several patterns that all match this
+	// topic (e.g. "run.*" and "run.finished"); deliver to it exactly once.
+	listeners = ids[:0]
+	for _, id := range ids {
+		if e.routeSeen[id] == e.routeEpoch {
+			continue
+		}
+		e.routeSeen[id] = e.routeEpoch
+		listeners = append(listeners, id)
+	}
 	return
 }
 
 func newExchange() *exchange {
-	return &exchange{root: &radixNode{}, topicMapping: map[string]string{}}
+	return &exchange{
+		root:         &radixNode{},
+		topicMapping: map[string][]string{},
+		routeSeen:    map[string]uint64{},
+	}
 }
 
 type radixNode struct {
@@ -184,7 +212,11 @@ func lookupRadixTree(root *radixNode, topic string) (values []string) {
 			}
 
 			if m < len(prefix) {
-				break
+				// Partial match: this node cannot deliver, but a wildcard
+				// section may have consumed a section that another sibling
+				// matches exactly, so keep scanning the sibling chain.
+				crt = crt.next
+				continue
 			}
 
 			if m < len(subSections) {

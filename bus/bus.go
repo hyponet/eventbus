@@ -31,12 +31,18 @@ func NewBus() *Bus {
 
 func (b *Bus) Subscribe(l *Listener) {
 	b.mux.Lock()
+	b.subscribeWithLock(l, []string{l.topic})
+	b.mux.Unlock()
+}
+
+func (b *Bus) subscribeWithLock(l *Listener, topics []string) {
 	b.listeners[l.id] = l
-	b.exchange.add(l.topic, l.id)
+	for _, topic := range topics {
+		b.exchange.add(topic, l.id)
+	}
 	if l.serial {
 		b.serials[l.id] = l
 	}
-	b.mux.Unlock()
 }
 
 // Unsubscribe stops new messages from being delivered to lid. For a serial
@@ -120,63 +126,92 @@ func (b *Bus) Wait() {
 	}
 }
 
-type serialConfig struct {
-	buffer int
-	block  bool
-	onDrop func(topic string, dropped uint64)
+// OverflowPolicy controls what a serial listener does when its queue is full.
+// A policy must be explicitly selected in SerialConfig.
+type OverflowPolicy uint8
+
+const (
+	// OverflowBlock blocks Publish until the listener has queue capacity.
+	OverflowBlock OverflowPolicy = iota + 1
+	// OverflowDropOldest discards the oldest queued message before enqueueing
+	// the new message.
+	OverflowDropOldest
+)
+
+// SerialConfig configures the bounded FIFO owned by a serial listener.
+type SerialConfig struct {
+	// Buffer is the number of messages that may wait behind the in-flight
+	// handler call. Zero uses the default of 256; negative values are invalid.
+	Buffer int
+	// Overflow is required and determines what happens when Buffer is full.
+	Overflow OverflowPolicy
+	// OnDrop is called after each OverflowDropOldest discard with the number
+	// of messages discarded by that notification (currently always one).
+	// Concurrent publishers may invoke it concurrently. It must be nil with
+	// OverflowBlock.
+	OnDrop func(delta uint64)
 }
 
-// SerialOption configures a serial listener created by SubscribeSerial.
-type SerialOption func(*serialConfig)
-
-// WithBuffer sets the FIFO queue size of a serial listener.
-// The default is 256; n <= 0 keeps the default.
-func WithBuffer(n int) SerialOption {
-	return func(c *serialConfig) {
-		if n > 0 {
-			c.buffer = n
-		}
-	}
-}
-
-// WithBlock makes publishers block while the serial listener's queue is
-// full, instead of applying the default drop-oldest policy. Use it for
-// consumers that must not lose messages (e.g. persistence) and can keep
-// up with the publisher. A handler must not synchronously publish to its own
-// full queue because it is the only consumer that can free queue capacity.
-func WithBlock() SerialOption {
-	return func(c *serialConfig) { c.block = true }
-}
-
-// WithDropCallback registers a callback invoked every time the
-// drop-oldest policy discards a message, with the topic and the
-// cumulative drop count. Concurrent publishers may invoke the callback
-// concurrently, so the callback must synchronize its own mutable state.
-func WithDropCallback(fn func(topic string, dropped uint64)) SerialOption {
-	return func(c *serialConfig) { c.onDrop = fn }
-}
-
-// SubscribeSerial registers fn on topic with guaranteed in-order
-// delivery: each publish is enqueued on a per-listener bounded FIFO
-// queue drained by a dedicated goroutine, so handler calls happen in
-// publish order. When the queue is full the oldest queued message is
-// dropped (unless WithBlock is given).
+// SubscribeSerial registers fn on every pattern in topics as ONE serial
+// listener: a single bounded FIFO queue drained by a single dedicated
+// goroutine. Handler calls happen exactly in the order the publishes
+// entered the queue, so ordering holds not only within one topic but
+// ACROSS all subscribed topics. This is the default and only serial
+// subscription model — consumers that merge several topics get source
+// order for free, provided a single publisher goroutine publishes the
+// related stream (per-publisher order is preserved when publishers
+// compete; their interleaving is inherently arbitrary).
 //
-// SubscribeSerial does not support one-shot semantics.
-func (b *Bus) SubscribeSerial(topic string, fn interface{}, opts ...SerialOption) string {
-	c := serialConfig{buffer: defaultSerialBuffer}
-	for _, opt := range opts {
-		opt(&c)
+// Patterns may overlap (e.g. "run.*" and "run.finished"): a publish that
+// matches several of the listener's patterns is still delivered exactly
+// once. Queue overflow behavior must be selected explicitly in config.
+//
+// SubscribeSerial does not support one-shot semantics. It panics when
+// topics is empty or config is invalid. The handler receives exactly the
+// arguments passed to Publish; the matching topic is not injected.
+func (b *Bus) SubscribeSerial(topics []string, fn interface{}, config SerialConfig) string {
+	if len(topics) == 0 {
+		panic("SubscribeSerial requires at least one topic")
 	}
-	l := NewListener(topic, fn, false, false)
+	if config.Buffer < 0 {
+		panic("SubscribeSerial buffer must not be negative")
+	}
+	if config.Buffer == 0 {
+		config.Buffer = defaultSerialBuffer
+	}
+	switch config.Overflow {
+	case OverflowBlock:
+		if config.OnDrop != nil {
+			panic("SubscribeSerial OnDrop must be nil with OverflowBlock")
+		}
+	case OverflowDropOldest:
+	default:
+		panic("SubscribeSerial requires a valid overflow policy")
+	}
+
+	uniqueTopics := make([]string, 0, len(topics))
+	seenTopics := make(map[string]struct{}, len(topics))
+	for _, topic := range topics {
+		if _, exists := seenTopics[topic]; exists {
+			continue
+		}
+		seenTopics[topic] = struct{}{}
+		uniqueTopics = append(uniqueTopics, topic)
+	}
+
+	l := NewListener(uniqueTopics[0], fn, false, false)
 	l.serial = true
-	l.capacity = c.buffer
-	l.queue = make([][]interface{}, 0, c.buffer)
-	l.blockOnFull = c.block
-	l.onDrop = c.onDrop
+	l.capacity = config.Buffer
+	l.queue = make([][]interface{}, config.Buffer)
+	l.overflow = config.Overflow
+	l.onDrop = config.OnDrop
 	l.done = make(chan struct{})
 	l.cond = sync.NewCond(&l.mux)
-	b.Subscribe(l)
+
+	b.mux.Lock()
+	b.subscribeWithLock(l, uniqueTopics)
+	b.mux.Unlock()
+
 	go func() {
 		defer func() {
 			b.mux.Lock()
@@ -190,8 +225,8 @@ func (b *Bus) SubscribeSerial(topic string, fn interface{}, opts ...SerialOption
 }
 
 // SubscribeSerial registers a serial listener on the process-global Bus.
-func SubscribeSerial(topic string, fn interface{}, opts ...SerialOption) string {
-	return sb.SubscribeSerial(topic, fn, opts...)
+func SubscribeSerial(topics []string, fn interface{}, config SerialConfig) string {
+	return sb.SubscribeSerial(topics, fn, config)
 }
 
 func Subscribe(topic string, fn interface{}) string {

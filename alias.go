@@ -3,8 +3,14 @@ package eventbus
 import "github.com/hyponet/eventbus/bus"
 
 type (
-	Bus          = bus.Bus
-	SerialOption = bus.SerialOption
+	Bus            = bus.Bus
+	OverflowPolicy = bus.OverflowPolicy
+	SerialConfig   = bus.SerialConfig
+)
+
+const (
+	OverflowBlock      = bus.OverflowBlock
+	OverflowDropOldest = bus.OverflowDropOldest
 )
 
 var (
@@ -15,9 +21,6 @@ var (
 	Unsubscribe        = bus.Unsubscribe
 	Publish            = bus.Publish
 	NewBus             = bus.NewBus
-	WithBuffer         = bus.WithBuffer
-	WithBlock          = bus.WithBlock
-	WithDropCallback   = bus.WithDropCallback
 	Close              = bus.Close
 	Wait               = bus.Wait
 )

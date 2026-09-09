@@ -28,15 +28,16 @@ type Listener struct {
 	// Serial delivery mode (see Bus.SubscribeSerial): a dedicated
 	// goroutine drains queue in FIFO order so handler calls are strictly
 	// ordered, unlike the default goroutine-per-publish dispatch.
-	serial      bool
-	queue       [][]interface{}
-	capacity    int
-	cond        *sync.Cond
-	blockOnFull bool
-	onDrop      func(topic string, dropped uint64)
-	dropped     uint64
-	closed      bool
-	done        chan struct{}
+	serial   bool
+	queue    [][]interface{}
+	head     int
+	size     int
+	capacity int
+	cond     *sync.Cond
+	overflow OverflowPolicy
+	onDrop   func(delta uint64)
+	closed   bool
+	done     chan struct{}
 }
 
 func (l *Listener) call(args ...interface{}) {
@@ -65,16 +66,17 @@ func (l *Listener) parseArgs(inArgs ...interface{}) (args []reflect.Value) {
 func (l *Listener) run() {
 	for {
 		l.mux.Lock()
-		for len(l.queue) == 0 && !l.closed {
+		for l.size == 0 && !l.closed {
 			l.cond.Wait()
 		}
-		if len(l.queue) == 0 {
+		if l.size == 0 {
 			l.mux.Unlock()
 			return
 		}
-		args := l.queue[0]
-		l.queue[0] = nil
-		l.queue = l.queue[1:]
+		args := l.queue[l.head]
+		l.queue[l.head] = nil
+		l.head = (l.head + 1) % l.capacity
+		l.size--
 		l.cond.Broadcast()
 		l.mux.Unlock()
 
@@ -82,12 +84,15 @@ func (l *Listener) run() {
 	}
 }
 
-// deliver enqueues args for the serial dispatch goroutine. Queue mutation is
-// serialized by l.mux, but the drop callback always runs after the lock is
-// released so it may safely publish, unsubscribe, or close the bus.
+// deliver takes a shallow snapshot of args and enqueues it for the serial
+// dispatch goroutine. Queue mutation is serialized by l.mux, but the drop
+// callback always runs after the lock is released so it may safely publish,
+// unsubscribe, or close the bus.
 func (l *Listener) deliver(args []interface{}) {
+	queuedArgs := append([]interface{}(nil), args...)
+
 	l.mux.Lock()
-	for l.blockOnFull && len(l.queue) >= l.capacity && !l.closed {
+	for l.overflow == OverflowBlock && l.size == l.capacity && !l.closed {
 		l.cond.Wait()
 	}
 	if l.closed {
@@ -95,21 +100,22 @@ func (l *Listener) deliver(args []interface{}) {
 		return
 	}
 
-	var dropped uint64
-	if len(l.queue) >= l.capacity {
-		l.queue[0] = nil
-		l.queue = l.queue[1:]
-		l.dropped++
-		dropped = l.dropped
+	dropped := false
+	if l.size == l.capacity {
+		l.queue[l.head] = nil
+		l.head = (l.head + 1) % l.capacity
+		l.size--
+		dropped = true
 	}
-	l.queue = append(l.queue, args)
+	tail := (l.head + l.size) % l.capacity
+	l.queue[tail] = queuedArgs
+	l.size++
 	l.cond.Signal()
 	onDrop := l.onDrop
-	topic := l.topic
 	l.mux.Unlock()
 
-	if dropped != 0 && onDrop != nil {
-		onDrop(topic, dropped)
+	if dropped && onDrop != nil {
+		onDrop(1)
 	}
 }
 
